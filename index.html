@@ -6,31 +6,33 @@
         (function() {
             const baseHREF = "https://cdn.jsdelivr.net/gh/genizy/polytrack@feb7f045e85fdf07e0d7f7e6d0f08984b9fe20d6/";
             
-            // 1. Setup Worker Interceptor
+            // 1. Setup Worker Interceptor to bypass CORS and SecurityErrors
             const originalWorker = window.Worker;
             let blobUrl = null;
 
+            // Immediately fetch the worker code so it's ready for the loading bar
             fetch(baseHREF + "simulation_worker.bundle.js")
                 .then(response => response.text())
                 .then(text => {
-                    // This is the critical fix for the loading screen:
-                    // We ensure the worker knows exactly where the CDN is
+                    // Correct the internal paths inside the worker script
                     const fixedCode = text.replaceAll("replacethisplease", baseHREF);
                     const blob = new Blob([fixedCode], { type: 'application/javascript' });
                     blobUrl = URL.createObjectURL(blob);
-                    console.log("PolyTrack: Worker Ready");
+                    console.log("PolyTrack: Worker Blob ready.");
                 })
-                .catch(err => console.error("PolyTrack: Worker Fetch Error:", err));
+                .catch(err => console.error("PolyTrack: Failed to fetch worker:", err));
 
             window.Worker = function(scriptUrl, options) {
                 if (typeof scriptUrl === 'string' && scriptUrl.includes("simulation_worker.bundle.js")) {
-                    return new originalWorker(blobUrl || scriptUrl, options);
+                    // If the blob isn't ready yet, we use a tiny data-uri shim to prevent a crash
+                    const finalUrl = blobUrl || 'data:application/javascript,console.log("Worker waiting...")';
+                    return new originalWorker(finalUrl, options);
                 }
                 return new originalWorker(scriptUrl, options);
             };
             window.Worker.prototype = originalWorker.prototype;
 
-            // 2. Redirects for Backend
+            // 2. Network Redirects for Backend (vps.kodub.com)
             const originalFetch = window.fetch;
             window.fetch = async function(input, init) {
                 let url = (typeof input === "string") ? input : input.url;
@@ -40,16 +42,24 @@
                 }
                 return originalFetch(input, init);
             };
+
+            const originalXHR = XMLHttpRequest.prototype.open;
+            XMLHttpRequest.prototype.open = function(method, url, ...rest) {
+                if (typeof url === "string" && url.includes("vps.kodub.com")) {
+                    url = url.replace("vps.kodub.com", "vpskodub.tmena1565.workers.dev");
+                }
+                return originalXHR.call(this, method, url, ...rest);
+            };
         })();
     </script>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-    <script defer="defer" src="https://cdn.jsdelivr.net/gh/genizy/polytrack@feb7f045e85fdf07e0d7f7e6d0f08984b9fe20d6/error_screen.bundle.js"></script>
-    <script defer="defer" src="https://cdn.jsdelivr.net/gh/genizy/polytrack@feb7f045e85fdf07e0d7f7e6d0f08984b9fe20d6/main.bundle.js"></script>
-    <style>
-        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }
-        #screen { width: 100vw; height: 100vh; display: block; }
-    </style>
+    <link rel="preload" href="forced_square.woff2" as="font" type="font/woff2" crossorigin="anonymous" />
+    <link rel="preload" href="images/logo.svg" as="image" type="image/svg+xml" />
+    <link rel="preload" href="images/discord.svg" as="image" type="image/svg+xml" />
+    <link rel="manifest" href="manifest.json" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1,viewport-fit=cover,user-scalable=no">
+    <script defer="defer" src="error_screen.bundle.js"></script>
+    <script defer="defer" src="main.bundle.js"></script>
 </head>
 <body>
     <canvas id="screen"></canvas>
