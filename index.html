@@ -1,37 +1,36 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-    <title>PolyTrack</title>
+    <base href="https://cdn.jsdelivr.net/gh/genizy/polytrack@feb7f045e85fdf07e0d7f7e6d0f08984b9fe20d6/">
     <script>
         (function() {
-            // Using absolute URL to prevent path confusion between GitHub and Google Sites
             const baseHREF = "https://cdn.jsdelivr.net/gh/genizy/polytrack@feb7f045e85fdf07e0d7f7e6d0f08984b9fe20d6/";
             
-            // 1. Worker Interceptor
+            // 1. Setup Worker Interceptor
             const originalWorker = window.Worker;
             let blobUrl = null;
 
             fetch(baseHREF + "simulation_worker.bundle.js")
                 .then(response => response.text())
                 .then(text => {
+                    // This is the critical fix for the loading screen:
+                    // We ensure the worker knows exactly where the CDN is
                     const fixedCode = text.replaceAll("replacethisplease", baseHREF);
                     const blob = new Blob([fixedCode], { type: 'application/javascript' });
                     blobUrl = URL.createObjectURL(blob);
-                    console.log("Worker Blob Generated");
+                    console.log("PolyTrack: Worker Ready");
                 })
-                .catch(err => console.error("Worker Error:", err));
+                .catch(err => console.error("PolyTrack: Worker Fetch Error:", err));
 
             window.Worker = function(scriptUrl, options) {
                 if (typeof scriptUrl === 'string' && scriptUrl.includes("simulation_worker.bundle.js")) {
-                    return new originalWorker(blobUrl || 'data:application/javascript,console.log("loading...")', options);
+                    return new originalWorker(blobUrl || scriptUrl, options);
                 }
                 return new originalWorker(scriptUrl, options);
             };
             window.Worker.prototype = originalWorker.prototype;
 
-            // 2. Backend Redirects
+            // 2. Redirects for Backend
             const originalFetch = window.fetch;
             window.fetch = async function(input, init) {
                 let url = (typeof input === "string") ? input : input.url;
@@ -43,15 +42,13 @@
             };
         })();
     </script>
-    
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
     <script defer="defer" src="https://cdn.jsdelivr.net/gh/genizy/polytrack@feb7f045e85fdf07e0d7f7e6d0f08984b9fe20d6/error_screen.bundle.js"></script>
     <script defer="defer" src="https://cdn.jsdelivr.net/gh/genizy/polytrack@feb7f045e85fdf07e0d7f7e6d0f08984b9fe20d6/main.bundle.js"></script>
-    
     <style>
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }
-        #screen { width: 100vw; height: 100vh; display: block; position: absolute; top:0; left:0; }
-        #ui { position: absolute; top:0; left:0; width: 100%; height: 100%; pointer-events: none; }
-        #ui * { pointer-events: auto; }
+        #screen { width: 100vw; height: 100vh; display: block; }
     </style>
 </head>
 <body>
