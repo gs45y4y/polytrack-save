@@ -1,47 +1,65 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-    <title>PolyTrack Storage</title>
+    <base href="https://cdn.jsdelivr.net/gh/genizy/polytrack@feb7f045e85fdf07e0d7f7e6d0f08984b9fe20d6/">
     <script>
         (function() {
-            const base = "https://cdn.jsdelivr.net/gh/genizy/polytrack@feb7f045e85fdf07e0d7f7e6d0f08984b9fe20d6/";
+            const baseHREF = "https://cdn.jsdelivr.net/gh/genizy/polytrack@feb7f045e85fdf07e0d7f7e6d0f08984b9fe20d6/";
+            
+            // 1. Setup Worker Interceptor to bypass CORS and SecurityErrors
             const originalWorker = window.Worker;
             let blobUrl = null;
 
-            fetch(base + "simulation_worker.bundle.js")
-                .then(r => r.text())
-                .then(t => {
-                    const fixed = t.replaceAll("replacethisplease", base);
-                    blobUrl = URL.createObjectURL(new Blob([fixed], { type: 'application/javascript' }));
-                });
+            // Immediately fetch the worker code so it's ready for the loading bar
+            fetch(baseHREF + "simulation_worker.bundle.js")
+                .then(response => response.text())
+                .then(text => {
+                    // Correct the internal paths inside the worker script
+                    const fixedCode = text.replaceAll("replacethisplease", baseHREF);
+                    const blob = new Blob([fixedCode], { type: 'application/javascript' });
+                    blobUrl = URL.createObjectURL(blob);
+                    console.log("PolyTrack: Worker Blob ready.");
+                })
+                .catch(err => console.error("PolyTrack: Failed to fetch worker:", err));
 
-            window.Worker = function(url, opt) {
-                if (typeof url === 'string' && url.includes("simulation_worker.bundle.js")) {
-                    return new originalWorker(blobUrl || url, opt);
+            window.Worker = function(scriptUrl, options) {
+                if (typeof scriptUrl === 'string' && scriptUrl.includes("simulation_worker.bundle.js")) {
+                    // If the blob isn't ready yet, we use a tiny data-uri shim to prevent a crash
+                    const finalUrl = blobUrl || 'data:application/javascript,console.log("Worker waiting...")';
+                    return new originalWorker(finalUrl, options);
                 }
-                return new originalWorker(url, opt);
+                return new originalWorker(scriptUrl, options);
             };
             window.Worker.prototype = originalWorker.prototype;
 
-            const origFetch = window.fetch;
-            window.fetch = async function(i, n) {
-                let u = (typeof i === "string") ? i : i.url;
-                if (u.includes("vps.kodub.com")) {
-                    u = u.replace("vps.kodub.com", "vpskodub.tmena1565.workers.dev");
-                    i = (i instanceof Request) ? new Request(u, n) : u;
+            // 2. Network Redirects for Backend (vps.kodub.com)
+            const originalFetch = window.fetch;
+            window.fetch = async function(input, init) {
+                let url = (typeof input === "string") ? input : input.url;
+                if (url.includes("vps.kodub.com")) {
+                    url = url.replace("vps.kodub.com", "vpskodub.tmena1565.workers.dev");
+                    input = (input instanceof Request) ? new Request(url, init) : url;
                 }
-                return origFetch(i, n);
+                return originalFetch(input, init);
+            };
+
+            const originalXHR = XMLHttpRequest.prototype.open;
+            XMLHttpRequest.prototype.open = function(method, url, ...rest) {
+                if (typeof url === "string" && url.includes("vps.kodub.com")) {
+                    url = url.replace("vps.kodub.com", "vpskodub.tmena1565.workers.dev");
+                }
+                return originalXHR.call(this, method, url, ...rest);
             };
         })();
     </script>
-    <script defer src="https://cdn.jsdelivr.net/gh/genizy/polytrack@feb7f045e85fdf07e0d7f7e6d0f08984b9fe20d6/error_screen.bundle.js"></script>
-    <script defer src="https://cdn.jsdelivr.net/gh/genizy/polytrack@feb7f045e85fdf07e0d7f7e6d0f08984b9fe20d6/main.bundle.js"></script>
-    <style>
-        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }
-        #screen { width: 100vw; height: 100vh; display: block; }
-    </style>
+    <meta charset="utf-8">
+    <link rel="preload" href="forced_square.woff2" as="font" type="font/woff2" crossorigin="anonymous" />
+    <link rel="preload" href="images/logo.svg" as="image" type="image/svg+xml" />
+    <link rel="preload" href="images/discord.svg" as="image" type="image/svg+xml" />
+    <link rel="manifest" href="manifest.json" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1,viewport-fit=cover,user-scalable=no">
+    <script defer="defer" src="error_screen.bundle.js"></script>
+    <script defer="defer" src="main.bundle.js"></script>
 </head>
 <body>
     <canvas id="screen"></canvas>
